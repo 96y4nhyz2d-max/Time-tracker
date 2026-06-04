@@ -660,17 +660,23 @@
   let sbKey = null;
 
   function sbFetch(path, method, body) {
+    const base = sbUrl.replace(/\/$/, '');
+    const url = base + '/rest/v1/' + path;
     const opts = {
       method: method || 'GET',
       headers: {
         'apikey': sbKey,
         'Authorization': 'Bearer ' + sbKey,
         'Content-Type': 'application/json',
-        'Prefer': method === 'POST' ? 'return=representation' : ''
+        'Accept': 'application/json'
       }
     };
+    if (method === 'POST') opts.headers['Prefer'] = 'return=representation';
     if (body) opts.body = JSON.stringify(body);
-    return fetch(sbUrl + '/rest/v1/' + path, opts).then(r => r.json());
+    return fetch(url, opts).then(function(r) {
+      if (!r.ok) return r.text().then(function(t) { throw new Error(t.slice(0,120)); });
+      return r.json();
+    });
   }
 
   function initAndLoad(cfg) {
