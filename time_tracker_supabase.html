@@ -942,7 +942,12 @@
   function resetConfig() {
     if (!confirm('Clear Supabase config? You will need to re-enter your URL and key.')) return;
     localStorage.removeItem(CFG_KEY);
-    location.reload();
+    sb = null;
+    closeSyncModal();
+    document.getElementById('cfg-url').value = '';
+    document.getElementById('cfg-key').value = '';
+    document.getElementById('cfg-err').textContent = '';
+    document.getElementById('config-screen').classList.add('active');
   }
   function copySyncId() {
     const id = document.getElementById('sync-id-display').value;
