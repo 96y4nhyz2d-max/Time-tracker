@@ -338,7 +338,7 @@
 <div class="modal-overlay" id="sync-modal">
   <div class="modal" style="max-width:440px;">
     <div class="modal-title">📱 Sync Devices</div>
-    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.6;">To share your data across devices, copy your Device ID and paste it on your other devices.</p>
+    <div id="sync-status-display" style="font-size:0.78rem;padding:8px 12px;border-radius:6px;background:var(--bg);border:1px solid var(--border);margin-bottom:1rem;word-break:break-all;line-height:1.5;"></div>
     <div class="field" style="margin-bottom:1rem;">
       <label>Your Device ID</label>
       <div style="display:flex;gap:8px;">
@@ -351,7 +351,7 @@
         <label>Use ID from another device</label>
         <input type="text" id="sync-id-input" placeholder="Paste Device ID here">
       </div>
-      <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;line-height:1.5;">⚠️ This will replace your current Device ID and reload. Any unsynced local data will no longer be accessible.</p>
+      <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;line-height:1.5;">⚠️ This will replace your current Device ID and reload.</p>
       <button class="primary" style="width:100%;" onclick="applySyncId()">Use This ID & Reload</button>
     </div>
     <div class="modal-footer" style="margin-top:1rem;">
@@ -923,6 +923,14 @@
 
   // ---- Sync Devices Modal ----
   function openSyncModal() {
+    const dot = document.getElementById('sync-dot');
+    const label = document.getElementById('sync-label');
+    const statusEl = document.getElementById('sync-status-display');
+    const isOk = dot && dot.classList.contains('synced');
+    statusEl.style.borderColor = isOk ? '#86efac' : '#fca5a5';
+    statusEl.style.background = isOk ? 'var(--success-light)' : 'var(--danger-light)';
+    statusEl.textContent = '🔴 Status: ' + (label ? label.textContent : 'unknown');
+    if (isOk) statusEl.textContent = '🟢 Status: synced';
     document.getElementById('sync-id-display').value = anonId || localStorage.getItem(ANON_ID_KEY) || 'Not set';
     document.getElementById('sync-id-input').value = '';
     document.getElementById('copy-id-btn').textContent = 'Copy';
