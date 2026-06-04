@@ -109,6 +109,8 @@
   .sync-dot.error { background: var(--danger); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .sync-label { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); }
+  .signout-btn { font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-family: var(--sans); }
+  .signout-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-light); }
   /* Config screen */
   .config-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 999; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
   .config-screen.active { display: flex; }
@@ -270,6 +272,7 @@
         <span id="dark-icon">☀️</span>
         <div class="toggle-track"><div class="toggle-thumb"></div></div>
       </button>
+      <button class="signout-btn" onclick="openSyncModal()" title="Sync devices">📱 Sync Devices</button>
     </div>
   </header>
 
@@ -331,7 +334,33 @@
     <div id="goals-area"></div>
   </div>
 
-  <!-- Add Goal Modal -->
+  <!-- Sync Devices Modal -->
+<div class="modal-overlay" id="sync-modal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title">📱 Sync Devices</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.6;">To share your data across devices, copy your Device ID and paste it on your other devices.</p>
+    <div class="field" style="margin-bottom:1rem;">
+      <label>Your Device ID</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="sync-id-display" readonly style="font-size:0.72rem;color:var(--muted);">
+        <button onclick="copySyncId()" style="flex-shrink:0;white-space:nowrap;" id="copy-id-btn">Copy</button>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:1.25rem;margin-top:0.25rem;">
+      <div class="field" style="margin-bottom:0.75rem;">
+        <label>Use ID from another device</label>
+        <input type="text" id="sync-id-input" placeholder="Paste Device ID here">
+      </div>
+      <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;line-height:1.5;">⚠️ This will replace your current Device ID and reload. Any unsynced local data will no longer be accessible.</p>
+      <button class="primary" style="width:100%;" onclick="applySyncId()">Use This ID & Reload</button>
+    </div>
+    <div class="modal-footer" style="margin-top:1rem;">
+      <button onclick="closeSyncModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Goal Modal -->
   <div class="modal-overlay" id="goal-modal">
     <div class="modal" style="max-width:400px;">
       <div class="modal-title">Add Goal</div>
@@ -891,6 +920,32 @@
     renderChart();
     renderLineChart();
   }
+
+  // ---- Sync Devices Modal ----
+  function openSyncModal() {
+    document.getElementById('sync-id-display').value = anonId || localStorage.getItem(ANON_ID_KEY) || 'Not set';
+    document.getElementById('sync-id-input').value = '';
+    document.getElementById('copy-id-btn').textContent = 'Copy';
+    document.getElementById('sync-modal').classList.add('open');
+  }
+  function closeSyncModal() { document.getElementById('sync-modal').classList.remove('open'); }
+  function copySyncId() {
+    const id = document.getElementById('sync-id-display').value;
+    navigator.clipboard.writeText(id).then(() => {
+      document.getElementById('copy-id-btn').textContent = '✓ Copied!';
+      setTimeout(() => document.getElementById('copy-id-btn').textContent = 'Copy', 2000);
+    }).catch(() => {
+      document.getElementById('sync-id-display').select();
+    });
+  }
+  function applySyncId() {
+    const newId = document.getElementById('sync-id-input').value.trim();
+    if (!newId) { alert('Please paste a Device ID first.'); return; }
+    if (!confirm('Switch to this Device ID? Your app will reload and show data from that device.')) return;
+    localStorage.setItem(ANON_ID_KEY, newId);
+    location.reload();
+  }
+  document.getElementById('sync-modal').addEventListener('click', function(e) { if (e.target === this) closeSyncModal(); });
 
   // ---- Goals ----
   const GOALS_KEY = 'personal_tt_goals_v1';
