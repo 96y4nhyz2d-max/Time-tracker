@@ -716,11 +716,12 @@
 
   async function loadFromSupabase() {
     try {
+      const url1 = sbUrl + '/rest/v1/time_entries?select=*&user_id=eq.' + anonId + '&order=date.desc';
       const [ents, cats] = await Promise.all([
         sbFetch('time_entries?select=*&user_id=eq.' + anonId + '&order=date.desc'),
         sbFetch('categories?select=*&user_id=eq.' + anonId + '&order=created_at.asc')
       ]);
-      if (!Array.isArray(ents) || !Array.isArray(cats)) throw new Error(JSON.stringify(ents));
+      if (!Array.isArray(ents) || !Array.isArray(cats)) throw new Error('Response: ' + JSON.stringify(ents).slice(0, 100));
       entries = ents.map(e => ({ id: e.id, date: e.date, start: e.start_time, end: e.end_time, hours: e.hours, task: e.task || '', catId: e.category_id || '' }));
       categories = cats.map(c => ({ id: c.id, name: c.name, color: { bg: c.color_bg, text: c.color_text, dot: c.color_dot } }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
@@ -952,8 +953,9 @@
     const isOk = dot && dot.classList.contains('synced');
     statusEl.style.borderColor = isOk ? '#86efac' : '#fca5a5';
     statusEl.style.background = isOk ? 'var(--success-light)' : 'var(--danger-light)';
-    statusEl.textContent = '🔴 Status: ' + (label ? label.textContent : 'unknown');
-    if (isOk) statusEl.textContent = '🟢 Status: synced';
+    const cfg = getConfig();
+    const cfgInfo = cfg ? 'URL: ' + cfg.url : 'No config saved';
+    statusEl.textContent = (isOk ? '🟢 ' : '🔴 ') + (label ? label.textContent : 'unknown') + ' | ' + cfgInfo;
     document.getElementById('sync-id-display').value = anonId || localStorage.getItem(ANON_ID_KEY) || 'Not set';
     document.getElementById('sync-id-input').value = '';
     document.getElementById('copy-id-btn').textContent = 'Copy';
