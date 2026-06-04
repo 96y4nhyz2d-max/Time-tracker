@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Personal Time Tracker</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -112,7 +111,7 @@
   .signout-btn { font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; font-family: var(--sans); }
   .signout-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-light); }
   /* Config screen */
-  .config-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 999; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+  .config-screen { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
   .config-screen.active { display: flex; }
   .config-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; width: 100%; max-width: 420px; }
   .config-title { font-family: var(--mono); font-size: 1rem; font-weight: 500; margin-bottom: 0.5rem; }
@@ -656,8 +655,28 @@
     initAndLoad({ url, key });
   }
 
+  // ---- Supabase REST API (no SDK) ----
+  let sbUrl = null;
+  let sbKey = null;
+
+  function sbFetch(path, method, body) {
+    const opts = {
+      method: method || 'GET',
+      headers: {
+        'apikey': sbKey,
+        'Authorization': 'Bearer ' + sbKey,
+        'Content-Type': 'application/json',
+        'Prefer': method === 'POST' ? 'return=representation' : ''
+      }
+    };
+    if (body) opts.body = JSON.stringify(body);
+    return fetch(sbUrl + '/rest/v1/' + path, opts).then(r => r.json());
+  }
+
   function initAndLoad(cfg) {
-    sb = window.supabase.createClient(cfg.url, cfg.key);
+    sbUrl = cfg.url;
+    sbKey = cfg.key;
+    sb = true; // flag that we're configured
     anonId = getAnonId();
     document.getElementById('config-screen').classList.remove('active');
     setSyncStatus('syncing', 'loading...');
@@ -697,19 +716,17 @@
 
   async function loadFromSupabase() {
     try {
-      const [{ data: ents, error: e1 }, { data: cats, error: e2 }] = await Promise.all([
-        sb.from('time_entries').select('*').eq('user_id', anonId).order('date', { ascending: false }),
-        sb.from('categories').select('*').eq('user_id', anonId).order('created_at')
+      const [ents, cats] = await Promise.all([
+        sbFetch('time_entries?select=*&user_id=eq.' + anonId + '&order=date.desc'),
+        sbFetch('categories?select=*&user_id=eq.' + anonId + '&order=created_at.asc')
       ]);
-      if (e1 || e2) throw new Error(e1?.message || e2?.message);
-      entries = (ents || []).map(e => ({ id: e.id, date: e.date, start: e.start_time, end: e.end_time, hours: e.hours, task: e.task || '', catId: e.category_id || '' }));
-      categories = (cats || []).map(c => ({ id: c.id, name: c.name, color: { bg: c.color_bg, text: c.color_text, dot: c.color_dot } }));
-      // Also save to localStorage as cache
+      if (!Array.isArray(ents) || !Array.isArray(cats)) throw new Error(JSON.stringify(ents));
+      entries = ents.map(e => ({ id: e.id, date: e.date, start: e.start_time, end: e.end_time, hours: e.hours, task: e.task || '', catId: e.category_id || '' }));
+      categories = cats.map(c => ({ id: c.id, name: c.name, color: { bg: c.color_bg, text: c.color_text, dot: c.color_dot } }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
       localStorage.setItem(CAT_KEY, JSON.stringify(categories));
       setSyncStatus('synced', 'synced');
     } catch(e) {
-      // Fall back to localStorage cache
       loadLocal();
       setSyncStatus('error', e.message || 'sync failed');
     }
@@ -729,24 +746,22 @@
     setSyncStatus('syncing', 'saving...');
     try {
       const row = { user_id: anonId, date: entry.date, start_time: entry.start, end_time: entry.end, hours: entry.hours, task: entry.task || '', category_id: entry.catId || null };
-      if (typeof entry.id === 'string' && !entry.id.toString().startsWith('tmp')) {
-        await sb.from('time_entries').update(row).eq('id', entry.id);
+      if (typeof entry.id === 'string' && !entry.id.startsWith('tmp')) {
+        await sbFetch('time_entries?id=eq.' + entry.id, 'PATCH', row);
       } else {
-        const { data } = await sb.from('time_entries').insert(row).select().single();
-        if (data) entry.id = data.id;
+        const result = await sbFetch('time_entries', 'POST', row);
+        if (Array.isArray(result) && result[0]) entry.id = result[0].id;
       }
       setSyncStatus('synced', 'synced');
     } catch(e) { setSyncStatus('error', 'sync error'); }
   }
 
-  function save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  }
+  function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
 
   async function deleteEntryDB(id) {
     if (!sb) return;
     setSyncStatus('syncing', 'deleting...');
-    try { await sb.from('time_entries').delete().eq('id', id); setSyncStatus('synced', 'synced'); }
+    try { await sbFetch('time_entries?id=eq.' + id, 'DELETE'); setSyncStatus('synced', 'synced'); }
     catch(e) { setSyncStatus('error', 'sync error'); }
   }
 
@@ -756,8 +771,13 @@
     setSyncStatus('syncing', 'saving...');
     try {
       const row = { user_id: anonId, name: cat.name, color_bg: cat.color.bg, color_text: cat.color.text, color_dot: cat.color.dot };
-      if (cat._isNew) { const { data } = await sb.from('categories').insert(row).select().single(); if (data) { cat.id = data.id; } delete cat._isNew; }
-      else { await sb.from('categories').update(row).eq('id', cat.id); }
+      if (cat._isNew) {
+        const result = await sbFetch('categories', 'POST', row);
+        if (Array.isArray(result) && result[0]) { cat.id = result[0].id; }
+        delete cat._isNew;
+      } else {
+        await sbFetch('categories?id=eq.' + cat.id, 'PATCH', row);
+      }
       setSyncStatus('synced', 'synced');
     } catch(e) { setSyncStatus('error', 'sync error'); }
   }
@@ -841,7 +861,7 @@
   async function clearAll() {
     if (!confirm('Delete all entries? This cannot be undone.')) return;
     entries = []; save(); render();
-    if (sb) { setSyncStatus('syncing', 'deleting...'); await sb.from('time_entries').delete().eq('user_id', anonId); setSyncStatus('synced', 'synced'); }
+    if (sb) { setSyncStatus('syncing', 'deleting...'); await sbFetch('time_entries?user_id=eq.' + anonId, 'DELETE'); setSyncStatus('synced', 'synced'); }
   }
 
   function exportCSV() {
@@ -942,13 +962,15 @@
   function resetConfig() {
     if (!confirm('Clear Supabase config? You will need to re-enter your URL and key.')) return;
     localStorage.removeItem(CFG_KEY);
+    localStorage.removeItem('personal_tt_sb_cfg');
     sb = null;
-    closeSyncModal();
+    document.getElementById('sync-modal').classList.remove('open');
     document.getElementById('cfg-url').value = '';
     document.getElementById('cfg-key').value = '';
-    document.getElementById('cfg-err').textContent = '';
+    document.getElementById('cfg-err').textContent = 'Config cleared. Enter your Supabase details below.';
     document.getElementById('config-screen').classList.add('active');
   }
+  function closeSyncModal() { document.getElementById('sync-modal').classList.remove('open'); }
   function copySyncId() {
     const id = document.getElementById('sync-id-display').value;
     navigator.clipboard.writeText(id).then(() => {
@@ -1586,7 +1608,7 @@
     if (!confirm('Delete this category? Entries tagged with it will show no category.')) return;
     categories = categories.filter(c => c.id !== id);
     saveCats(); renderCatList();
-    if (sb) { setSyncStatus('syncing', 'deleting...'); await sb.from('categories').delete().eq('id', id); setSyncStatus('synced', 'synced'); }
+    if (sb) { setSyncStatus('syncing', 'deleting...'); await sbFetch('categories?id=eq.' + id, 'DELETE'); setSyncStatus('synced', 'synced'); }
   }
 
   document.getElementById('cat-modal').addEventListener('click', function(e) {
