@@ -76,6 +76,22 @@
   }
   input[type="text"] { font-family: var(--sans); }
   input:focus, select:focus { border-color: var(--accent); }
+
+  .time-picker {
+    display: flex; align-items: center; gap: 1px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 8px; transition: border-color 0.15s; width: 100%; box-sizing: border-box;
+  }
+  .time-picker:focus-within { border-color: var(--accent); }
+  .tp-seg {
+    font-family: var(--mono); font-size: 0.88rem; background: transparent; border: none;
+    outline: none; color: var(--text); text-align: center; padding: 2px 1px;
+  }
+  .tp-seg::placeholder { color: var(--border-strong); }
+  .tp-hour, .tp-min { width: 2ch; }
+  .tp-ampm { width: 2.4ch; cursor: pointer; }
+  .tp-colon { font-family: var(--mono); font-size: 0.88rem; color: var(--muted); padding: 0 1px; user-select: none; }
+  .tp-space { width: 4px; }
   select { cursor: pointer; }
 
   .hours-display { display: flex; flex-direction: column; justify-content: center; }
@@ -324,11 +340,25 @@
       </div>
       <div class="field">
         <label>Start Time</label>
-        <input type="time" id="inp-start">
+        <div class="time-picker" id="tp-inp-start">
+          <input type="hidden" id="inp-start">
+          <input class="tp-seg tp-hour" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-colon">:</span>
+          <input class="tp-seg tp-min" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-space"></span>
+          <input class="tp-seg tp-ampm" maxlength="2" placeholder="--">
+        </div>
       </div>
       <div class="field">
         <label>End Time</label>
-        <input type="time" id="inp-end">
+        <div class="time-picker" id="tp-inp-end">
+          <input type="hidden" id="inp-end">
+          <input class="tp-seg tp-hour" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-colon">:</span>
+          <input class="tp-seg tp-min" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-space"></span>
+          <input class="tp-seg tp-ampm" maxlength="2" placeholder="--">
+        </div>
       </div>
       <div class="field hours-display">
         <label>Hours</label>
@@ -614,11 +644,25 @@
       </div>
       <div class="field">
         <label>Start Time</label>
-        <input type="time" id="edit-start">
+        <div class="time-picker" id="tp-edit-start">
+          <input type="hidden" id="edit-start">
+          <input class="tp-seg tp-hour" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-colon">:</span>
+          <input class="tp-seg tp-min" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-space"></span>
+          <input class="tp-seg tp-ampm" maxlength="2" placeholder="--">
+        </div>
       </div>
       <div class="field">
         <label>End Time</label>
-        <input type="time" id="edit-end">
+        <div class="time-picker" id="tp-edit-end">
+          <input type="hidden" id="edit-end">
+          <input class="tp-seg tp-hour" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-colon">:</span>
+          <input class="tp-seg tp-min" maxlength="2" placeholder="--" inputmode="numeric">
+          <span class="tp-space"></span>
+          <input class="tp-seg tp-ampm" maxlength="2" placeholder="--">
+        </div>
       </div>
       <div class="field hours-display">
         <label>Hours</label>
@@ -892,7 +936,7 @@
     entries.unshift(entry);
     render();
     await saveEntry(entry);
-    document.getElementById('inp-end').value = '';
+    setTimePicker('inp-end', '');
     document.getElementById('inp-task').value = '';
     document.getElementById('inp-notes').value = '';
     document.getElementById('hours-preview').textContent = '--.-';
@@ -901,8 +945,8 @@
 
   function clockIn() {
     document.getElementById('inp-date').value = today();
-    document.getElementById('inp-start').value = nowTime();
-    document.getElementById('inp-end').value = '';
+    setTimePicker('inp-start', nowTime());
+    setTimePicker('inp-end', '');
     document.getElementById('hours-preview').textContent = '--.-';
     document.getElementById('hours-preview').classList.add('empty');
     document.getElementById('err-msg').textContent = '';
@@ -910,7 +954,7 @@
   }
 
   function clockOut() {
-    document.getElementById('inp-end').value = nowTime();
+    setTimePicker('inp-end', nowTime());
     updatePreview();
   }
 
@@ -1497,8 +1541,8 @@
     if (!entry) return;
     editingId = id;
     document.getElementById('edit-date').value = entry.date;
-    document.getElementById('edit-start').value = entry.start;
-    document.getElementById('edit-end').value = entry.end;
+    setTimePicker('edit-start', entry.start);
+    setTimePicker('edit-end', entry.end);
     document.getElementById('edit-task').value = entry.task || '';
     document.getElementById('edit-notes').value = entry.notes || '';
     document.getElementById('edit-hours-preview').textContent = fmtH(entry.hours);
@@ -2130,6 +2174,116 @@
     // Also load local data so app is usable while config screen shows
     loadLocal(); renderCatSelect(); render(); renderLineChart();
   }
+
+  // ── Custom Time Picker ──────────────────────────────────────────────────────
+
+  function initTimePicker(wrapperId) {
+    const wrap = document.getElementById('tp-' + wrapperId);
+    if (!wrap) return;
+    const hidden = document.getElementById(wrapperId);
+    const hour = wrap.querySelector('.tp-hour');
+    const min  = wrap.querySelector('.tp-min');
+    const ampm = wrap.querySelector('.tp-ampm');
+
+    function commit() {
+      const h = parseInt(hour.value, 10);
+      const m = parseInt(min.value, 10);
+      const ap = ampm.value.toUpperCase();
+      if (!isNaN(h) && !isNaN(m) && (ap === 'AM' || ap === 'PM')) {
+        let h24 = h % 12 + (ap === 'PM' ? 12 : 0);
+        hidden.value = String(h24).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+      } else {
+        hidden.value = '';
+      }
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function segKeydown(e, seg) {
+      const key = e.key;
+      if (seg === 'ampm') {
+        if (key === 'a' || key === 'A') { e.preventDefault(); ampm.value = 'AM'; commit(); }
+        else if (key === 'p' || key === 'P') { e.preventDefault(); ampm.value = 'PM'; commit(); }
+        else if (key === 'ArrowUp' || key === 'ArrowDown') {
+          e.preventDefault();
+          ampm.value = ampm.value === 'AM' ? 'PM' : 'AM';
+          commit();
+        }
+        else if (key === 'Backspace') { ampm.value = ''; commit(); }
+        return;
+      }
+
+      if (key === 'Backspace') return;
+      if (key === 'Tab') return;
+      if (!/^\d$/.test(key)) { e.preventDefault(); return; }
+
+      e.preventDefault();
+      const el = seg === 'hour' ? hour : min;
+      const cur = el.value;
+      let next;
+
+      if (cur.length >= 2 || (cur.length === 1 && parseInt(cur + key, 10) > (seg === 'hour' ? 12 : 59))) {
+        next = key;
+      } else {
+        next = cur + key;
+      }
+      el.value = next;
+
+      // Auto-advance
+      const advance = (seg === 'hour' && (next.length === 2 || parseInt(next, 10) > 1))
+                   || (seg === 'min'  && next.length === 2);
+      if (advance) {
+        if (seg === 'hour') {
+          // Pad hour to 2 digits if needed
+          if (next.length === 1) hour.value = next.padStart(2, '0');
+          min.focus(); min.select();
+        } else {
+          min.value = next.padStart(2, '0');
+          ampm.focus(); ampm.select();
+        }
+      }
+      commit();
+    }
+
+    hour.addEventListener('keydown', e => segKeydown(e, 'hour'));
+    min.addEventListener('keydown',  e => segKeydown(e, 'min'));
+    ampm.addEventListener('keydown', e => segKeydown(e, 'ampm'));
+
+    // Click on AM/PM toggles it
+    ampm.addEventListener('click', () => {
+      if (ampm.value === 'AM') { ampm.value = 'PM'; commit(); }
+      else if (ampm.value === 'PM') { ampm.value = 'AM'; commit(); }
+      else { ampm.value = 'AM'; commit(); }
+    });
+
+    // Prevent typing directly into AM/PM (handled by keydown)
+    ampm.addEventListener('input', e => { e.preventDefault(); });
+  }
+
+  function setTimePicker(id, val24) {
+    const hidden = document.getElementById(id);
+    const wrap = document.getElementById('tp-' + id);
+    if (!hidden || !wrap) return;
+    hidden.value = val24 || '';
+    const hour = wrap.querySelector('.tp-hour');
+    const min  = wrap.querySelector('.tp-min');
+    const ampm = wrap.querySelector('.tp-ampm');
+    if (!val24) {
+      hour.value = ''; min.value = ''; ampm.value = '';
+    } else {
+      const [h24, m] = val24.split(':').map(Number);
+      const isPM = h24 >= 12;
+      const h12 = (h24 % 12) || 12;
+      hour.value = String(h12);
+      min.value  = String(m).padStart(2, '0');
+      ampm.value = isPM ? 'PM' : 'AM';
+    }
+    hidden.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  initTimePicker('inp-start');
+  initTimePicker('inp-end');
+  initTimePicker('edit-start');
+  initTimePicker('edit-end');
 </script>
 </body>
 </html>
