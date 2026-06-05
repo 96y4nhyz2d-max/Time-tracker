@@ -338,6 +338,10 @@
         </select>
       </div>
     </div>
+    <div class="field" style="margin-bottom:0;">
+      <label>Notes</label>
+      <input type="text" id="inp-notes" placeholder="Optional notes">
+    </div>
     <div class="error-msg" id="err-msg"></div>
     <div class="btn-row">
       <button class="primary" onclick="addEntry()">+ Log Entry</button>
@@ -445,7 +449,8 @@
         <col style="width:80px">
         <col style="width:80px">
         <col style="width:58px">
-        <col style="width:120px">
+        <col style="width:110px">
+        <col style="width:130px">
         <col>
         <col style="width:30px">
       </colgroup>
@@ -458,6 +463,7 @@
           <th style="position:sticky;top:0;background:var(--surface);z-index:1;">Hours</th>
           <th style="position:sticky;top:0;background:var(--surface);z-index:1;">Category</th>
           <th style="position:sticky;top:0;background:var(--surface);z-index:1;">Task</th>
+          <th style="position:sticky;top:0;background:var(--surface);z-index:1;">Notes</th>
           <th style="position:sticky;top:0;background:var(--surface);z-index:1;"></th>
         </tr>
       </thead>
@@ -620,6 +626,10 @@
         <select id="edit-cat"></select>
       </div>
     </div>
+    <div class="field" style="margin-bottom:6px;">
+      <label>Notes</label>
+      <input type="text" id="edit-notes" placeholder="Optional notes">
+    </div>
     <div class="error-msg" id="edit-err"></div>
     <div class="modal-footer">
       <button class="ghost-danger" onclick="deleteFromEdit()">Delete Entry</button>
@@ -757,7 +767,7 @@
         sbFetch('categories?select=*&user_id=eq.' + anonId + '&order=created_at.asc')
       ]);
       if (!Array.isArray(ents) || !Array.isArray(cats)) throw new Error('Response: ' + JSON.stringify(ents).slice(0, 100));
-      entries = ents.map(e => ({ id: e.id, date: e.date, start: e.start_time, end: e.end_time, hours: e.hours, task: e.task || '', catId: e.category_id || '' }));
+      entries = ents.map(e => ({ id: e.id, date: e.date, start: e.start_time, end: e.end_time, hours: e.hours, task: e.task || '', catId: e.category_id || '', notes: e.notes || '' }));
       categories = cats.map(c => ({ id: c.id, name: c.name, color: { bg: c.color_bg, text: c.color_text, dot: c.color_dot } }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
       localStorage.setItem(CAT_KEY, JSON.stringify(categories));
@@ -781,7 +791,7 @@
     if (!sb) return;
     setSyncStatus('syncing', 'saving...');
     try {
-      const row = { user_id: anonId, date: entry.date, start_time: entry.start, end_time: entry.end, hours: entry.hours, task: entry.task || '', category_id: entry.catId || null };
+      const row = { user_id: anonId, date: entry.date, start_time: entry.start, end_time: entry.end, hours: entry.hours, task: entry.task || '', category_id: entry.catId || null, notes: entry.notes || null };
       if (typeof entry.id === 'string' && !entry.id.startsWith('tmp')) {
         await sbFetch('time_entries?id=eq.' + entry.id, 'PATCH', row);
       } else {
@@ -867,12 +877,14 @@
     const err = document.getElementById('err-msg');
     if (!date || !start || !end) { err.textContent = 'Please fill in date, start time, and end time.'; return; }
     err.textContent = '';
-    const entry = { id: 'tmp_' + Date.now(), date, start, end, hours: calcHours(start, end), task, catId };
+    const notes = document.getElementById('inp-notes').value.trim();
+    const entry = { id: 'tmp_' + Date.now(), date, start, end, hours: calcHours(start, end), task, catId, notes };
     entries.unshift(entry);
     render();
     await saveEntry(entry);
     document.getElementById('inp-end').value = '';
     document.getElementById('inp-task').value = '';
+    document.getElementById('inp-notes').value = '';
     document.getElementById('hours-preview').textContent = '--.-';
     document.getElementById('hours-preview').classList.add('empty');
   }
@@ -902,12 +914,12 @@
 
   function exportCSV() {
     if (!entries.length) { alert('No entries to export.'); return; }
-    const rows = [['Date','Day','Start','End','Hours (decimal)','Hours (h:mm)','Category','Task']];
+    const rows = [['Date','Day','Start','End','Hours (decimal)','Hours (h:mm)','Category','Task','Notes']];
     [...entries].sort((a,b) => a.date.localeCompare(b.date)).forEach(e => {
       const totalMin = Math.round(e.hours * 60);
       const hhmm = Math.floor(totalMin / 60) + ':' + String(totalMin % 60).padStart(2,'0');
       const cat = getCat(e.catId);
-      rows.push([e.date, dayOfWeek(e.date), fmt12(e.start), fmt12(e.end), e.hours.toFixed(2), hhmm, cat ? cat.name : '', e.task || '']);
+      rows.push([e.date, dayOfWeek(e.date), fmt12(e.start), fmt12(e.end), e.hours.toFixed(2), hhmm, cat ? cat.name : '', e.task || '', e.notes || '']);
     });
     const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -967,9 +979,10 @@
         <td class="hours-cell">${fmtH(e.hours)}</td>
         <td class="cat-cell">${pill}</td>
         <td class="task-cell" title="${(e.task||'').replace(/"/g,'&quot;')}">${e.task || '<span style="color:var(--border-strong)">--</span>'}</td>
+        <td class="task-cell" style="color:var(--muted);" title="${(e.notes||'').replace(/"/g,'&quot;')}">${e.notes || ''}</td>
         <td class="action-cell">
-          <button class="edit-btn" onclick="openEditModal(${e.id})" title="Edit">&#9998;</button>
-          <button class="del-btn" onclick="deleteEntry(${e.id})" title="Delete">&#10005;</button>
+          <button class="edit-btn" onclick="openEditModal('${e.id}')" title="Edit">&#9998;</button>
+          <button class="del-btn" onclick="deleteEntry('${e.id}')" title="Delete">&#10005;</button>
         </td>
       </tr>`;
     }).join('');
@@ -1477,6 +1490,7 @@
     document.getElementById('edit-start').value = entry.start;
     document.getElementById('edit-end').value = entry.end;
     document.getElementById('edit-task').value = entry.task || '';
+    document.getElementById('edit-notes').value = entry.notes || '';
     document.getElementById('edit-hours-preview').textContent = fmtH(entry.hours);
     document.getElementById('edit-hours-preview').classList.remove('empty');
     document.getElementById('edit-err').textContent = '';
@@ -1503,12 +1517,13 @@
     const end = document.getElementById('edit-end').value;
     const task = document.getElementById('edit-task').value.trim();
     const catId = document.getElementById('edit-cat').value;
+    const notes = document.getElementById('edit-notes').value.trim();
     const err = document.getElementById('edit-err');
     if (!date || !start || !end) { err.textContent = 'Please fill in date, start time, and end time.'; return; }
     err.textContent = '';
     const idx = entries.findIndex(e => String(e.id) === String(editingId));
     if (idx === -1) return;
-    entries[idx] = { ...entries[idx], date, start, end, task, catId, hours: calcHours(start, end) };
+    entries[idx] = { ...entries[idx], date, start, end, task, catId, notes, hours: calcHours(start, end) };
     save();
     closeEditModal();
     render();
