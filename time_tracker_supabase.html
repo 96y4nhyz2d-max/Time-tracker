@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Personal Time Tracker</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#f5f3ee" id="theme-color-meta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Time Tracker">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -237,6 +242,30 @@
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; width: 100%; max-width: 400px; margin: 1rem; }
   .modal-title { font-size: 0.9rem; font-weight: 500; margin-bottom: 1.25rem; }
   .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.25rem; }
+
+  /* Mobile improvements */
+  @media (max-width: 479px) {
+    body { padding: 1rem 0.75rem; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+    h1 { font-size: 0.95rem; }
+    .stats-row { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .stat { padding: 0.75rem 0.5rem; }
+    .stat-val { font-size: 1.1rem; }
+    .stat-lbl { font-size: 0.65rem; }
+    .card { padding: 1rem; }
+    button { min-height: 40px; }
+    .btn-row { gap: 6px; }
+    .btn-row button { font-size: 0.8rem; padding: 8px 10px; }
+    .chart-tab { padding: 5px 10px; font-size: 0.74rem; }
+    header { flex-wrap: wrap; gap: 8px; }
+    .sync-label { max-width: 120px; }
+    .modal { margin: 0.5rem; padding: 1.25rem; }
+    .input-grid { grid-template-columns: 1fr 1fr; }
+    table { font-size: 0.75rem; }
+    tbody td { padding: 8px 5px 8px 0; font-size: 0.72rem; }
+    thead th { font-size: 0.62rem; }
+  }
+  /* Safe area for notched iPhones */
+  header { padding-top: env(safe-area-inset-top, 0); }
 </style>
 </head>
 <body>
@@ -2032,6 +2061,8 @@
     const isDark = document.documentElement.classList.toggle('dark');
     localStorage.setItem('kyle_tt_darkmode', isDark ? '1' : '0');
     document.getElementById('dark-icon').textContent = isDark ? '🌙' : '☀️';
+    const meta = document.getElementById('theme-color-meta');
+    if (meta) meta.content = isDark ? '#0f1117' : '#f5f3ee';
   }
 
   // Init
@@ -2043,6 +2074,15 @@
   if (localStorage.getItem('kyle_tt_darkmode') === '1') {
     document.documentElement.classList.add('dark');
     document.getElementById('dark-icon').textContent = '🌙';
+    const meta = document.getElementById('theme-color-meta');
+    if (meta) meta.content = '#0f1117';
+  }
+
+  // Register service worker for PWA offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
   }
 
   loadGoals();
