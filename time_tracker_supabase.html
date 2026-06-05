@@ -815,14 +815,18 @@
 
   async function loadFromSupabase() {
     try {
-      const url1 = sbUrl + '/rest/v1/time_entries?select=*&user_id=eq.' + anonId + '&order=date.desc';
-      const [ents, cats] = await Promise.all([
+      const [ents, cats, gls] = await Promise.all([
         sbFetch('time_entries?select=*&user_id=eq.' + anonId + '&order=date.desc'),
-        sbFetch('categories?select=*&user_id=eq.' + anonId + '&order=created_at.asc')
+        sbFetch('categories?select=*&user_id=eq.' + anonId + '&order=created_at.asc'),
+        sbFetch('goals?select=*&user_id=eq.' + anonId + '&order=created_at.asc')
       ]);
       if (!Array.isArray(ents) || !Array.isArray(cats)) throw new Error('Response: ' + JSON.stringify(ents).slice(0, 100));
       entries = ents.map(e => ({ id: e.id, date: e.date, start: e.start_time, end: e.end_time, hours: e.hours, task: e.task || '', catId: e.category_id || '', notes: e.notes || '' }));
       categories = cats.map(c => ({ id: c.id, name: c.name, color: { bg: c.color_bg, text: c.color_text, dot: c.color_dot } }));
+      if (Array.isArray(gls)) {
+        goals = gls.map(g => ({ id: g.id, name: g.name, target: g.target, emoji: g.emoji || '🎯', catId: g.cat_id || '' }));
+        localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
       localStorage.setItem(CAT_KEY, JSON.stringify(categories));
       setSyncStatus('synced', 'synced');
@@ -1102,6 +1106,31 @@
   }
   function saveGoals() { localStorage.setItem(GOALS_KEY, JSON.stringify(goals)); }
 
+  async function saveGoalDB(goal) {
+    saveGoals();
+    if (!sb) return;
+    setSyncStatus('syncing', 'saving...');
+    try {
+      const row = { user_id: anonId, name: goal.name, target: goal.target, emoji: goal.emoji || '🎯', cat_id: goal.catId || null };
+      if (typeof goal.id === 'string' && goal.id.startsWith('goal_')) {
+        const result = await sbFetch('goals', 'POST', row);
+        if (Array.isArray(result) && result[0]) goal.id = result[0].id;
+        saveGoals();
+      } else {
+        await sbFetch('goals?id=eq.' + goal.id, 'PATCH', row);
+      }
+      setSyncStatus('synced', 'synced');
+    } catch(e) { setSyncStatus('error', 'sync error'); }
+  }
+
+  async function deleteGoalDB(id) {
+    if (!sb) return;
+    if (typeof id === 'string' && id.startsWith('goal_')) return;
+    setSyncStatus('syncing', 'deleting...');
+    try { await sbFetch('goals?id=eq.' + id, 'DELETE'); setSyncStatus('synced', 'synced'); }
+    catch(e) { setSyncStatus('error', 'sync error'); }
+  }
+
   function renderGoals(weekH) {
     const area = document.getElementById('goals-area');
     if (!goals.length) {
@@ -1167,8 +1196,9 @@
     if (!name) { err.textContent = 'Please enter a goal name.'; return; }
     const target = parseFloat(targetStr);
     if (!targetStr || isNaN(target) || target <= 0) { err.textContent = 'Please enter a valid target (e.g. 7).'; return; }
-    goals.push({ id: 'goal_' + Date.now(), name, target, emoji: emoji || '🎯', catId });
-    saveGoals();
+    const goal = { id: 'goal_' + Date.now(), name, target, emoji: emoji || '🎯', catId };
+    goals.push(goal);
+    saveGoalDB(goal);
     closeGoalModal();
     render();
   }
@@ -1177,6 +1207,7 @@
     if (!confirm('Delete this goal?')) return;
     goals = goals.filter(g => g.id !== id);
     saveGoals();
+    deleteGoalDB(id);
     render();
   }
 
